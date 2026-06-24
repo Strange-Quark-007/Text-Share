@@ -22,6 +22,8 @@ app.get('/', (req: Request, res: Response) => {
   res.sendFile(join(__dirname, '../public', 'index.html'));
 });
 
+const activeUploads = new Map<string, { stream: fs.WriteStream; startTime: number }>();
+
 io.on('connection', (socket: Socket) => {
   socket.emit('textChange', text);
   socket.emit('fileListUpdate', getFileList());
@@ -31,12 +33,47 @@ io.on('connection', (socket: Socket) => {
     io.emit('textChange', text);
   });
 
-  socket.on('uploadFile', (meta, buffer: Buffer) => {
+  socket.on('uploadChunk', (meta: { name: string; chunkIndex: number; totalChunks: number }, data: Buffer, callback?: () => void) => {
+    const uploadKey = `${socket.id}_${meta.name}`;
     const filePath = join(UPLOAD_DIR, meta.name);
-    fs.writeFile(filePath, Buffer.from(buffer), (err) => {
-      if (!err) {
-        io.emit('fileListUpdate', getFileList());
+    
+    let upload = activeUploads.get(uploadKey);
+    
+    if (meta.chunkIndex === 0) {
+      const stream = fs.createWriteStream(filePath);
+      upload = { stream, startTime: Date.now() };
+      activeUploads.set(uploadKey, upload);
+    }
+    
+    if (!upload) {
+      callback?.();
+      return;
+    }
+    
+    upload.stream.write(Buffer.from(data), (err) => {
+      if (meta.chunkIndex === meta.totalChunks - 1) {
+        upload!.stream.end();
+        activeUploads.delete(uploadKey);
+        
+        if (!err) {
+          io.emit('fileListUpdate', getFileList());
+        }
+        
+        let fileSize = 0;
+        try {
+          fileSize = fs.statSync(filePath).size;
+        } catch (statErr) {
+          // ignore
+        }
+        
+        const durationSeconds = (Date.now() - upload!.startTime) / 1000;
+        const speedMbps = durationSeconds > 0 ? ((fileSize * 8) / 1_000_000) / durationSeconds : 0;
+        
+        const timestamp = new Date().toISOString();
+        console.log(`[Upload] File: ${meta.name}, Size: ${fileSize} bytes, Speed: ${speedMbps.toFixed(2)} Mbps, Write completed at: ${timestamp}`);
       }
+      
+      callback?.();
     });
   });
 
@@ -45,6 +82,15 @@ io.on('connection', (socket: Socket) => {
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
       io.emit('fileListUpdate', getFileList());
+    }
+  });
+
+  socket.on('disconnect', () => {
+    for (const [key, upload] of activeUploads.entries()) {
+      if (key.startsWith(`${socket.id}_`)) {
+        upload.stream.end();
+        activeUploads.delete(key);
+      }
     }
   });
 });

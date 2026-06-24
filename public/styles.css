@@ -103,7 +103,7 @@ button:hover {
   background-color: #2b2b3f;
   border-radius: 12px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.7);
-  height: 100%;
+  flex: 1;
   min-height: 0; /* This allows the file-list to scroll properly */
   overflow-y: auto;
 }
@@ -188,18 +188,21 @@ button:hover {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 8px;
+  gap: 8px;
 }
 
 .file-row a {
-  width: 50%;
+  flex: 1;
+  min-width: 0;
   color: #bfbfff;
-  text-wrap: nowrap;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .actions {
   display: flex;
+  flex-shrink: 0;
   gap: 8px;
 }
 
@@ -224,4 +227,18 @@ button:hover {
     flex: 1;
     overflow-y: auto;
   }
+}
+
+/* Speed Display Styling */
+.speed-display {
+  padding: 12px;
+  text-align: center;
+  font-size: 14px;
+  color: #bfbfff;
+  border-top: 1px dashed #3d3d5c;
+  font-weight: 500;
+  display: block;
+}
+.speed-display:empty {
+  display: none;
 }
